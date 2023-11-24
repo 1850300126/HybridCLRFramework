@@ -1,0 +1,178 @@
+using EasyUpdateDemoSDK;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Unity.VisualScripting;
+using UnityEngine;
+using static EasyUpdateDemoSDK.APISystem;
+
+[Serializable]
+public class LevelConfig
+{
+    public string level_name = "";
+
+    public string stage_name = "";
+
+    public string elements_name = "";
+}
+[Serializable]
+public class LevelConfigList
+{
+    public List<LevelConfig> levels = new List<LevelConfig>();
+}
+
+public class LevelSystem : MonoBehaviour
+{   
+    // 关卡系统api集合
+    public Dictionary<string, APISystem.APICallFunction> api_functions = new Dictionary<string, APISystem.APICallFunction>();
+
+    // 当前读取到的关卡配置
+    public List<LevelConfig> current_level_list = new List<LevelConfig>();
+    public void OnLoaded()
+    {   
+        // 注册api调用
+        // 构建场景类
+        api_functions.Add("build_config", BuildConfig);
+        api_functions.Add("build_level", BuildLevel);
+
+        // 获取场景信息类
+        api_functions.Add("get_elements", GetElements);
+
+
+
+        APISystem.instance.RegistAPI("level_system", OnLevelSystemAPIFunction);
+
+    }
+
+    public object OnLevelSystemAPIFunction(string function_index, object[] param)
+    {
+        if (api_functions.ContainsKey(function_index) == true)
+        {
+            return api_functions[function_index](param);
+        }
+        return null;
+    }
+
+    // 读取所有的配置信息
+    public object BuildConfig(object[] param)
+    {   
+        // 读取所有关卡的config
+        List<LevelConfigList> config_list = ConfigSystem.instance.BuildConfig<LevelConfigList>("level_configs");
+
+        // 获取第i关的list
+        for (int i = 0; i < config_list.Count; i++)
+        {
+            for (int j = 0; j < config_list[i].levels.Count; j++)
+            {
+                // 将第i关的所有LevelConfig类型加入list中
+                current_level_list.Add(config_list[i].levels[j]);
+            }
+        }
+
+        return null;
+    }
+
+    // 得到当前关卡需要用到的配置信息
+    public LevelConfig current_level_config;
+    public CommonInfo current_level_elements_info;
+    public object BuildLevel(object[] param)
+    {
+        current_level_config = GetLevelConfig((string)param[0]);
+
+        if (current_level_config == null) return null;
+
+        Debug.Log(current_level_config.stage_name);
+
+        StageSystem.instance.LoadStage
+            (
+                current_level_config.stage_name, () =>
+                {
+                    LoadElements();
+
+                    LoadPlayer();
+
+                    LoadCameraSystem();
+
+                    // 移动点位系统包含人物位置，相机旋转等信息，要在这两个系统之后去加载
+                    LoadMovePointSystem();
+
+                    // 加载玩家控制模块
+                    LoadPlayerControl();
+
+                    // 加载武器模块
+                    LoadWeaponSystem();
+                }
+            );
+        return null;
+    }
+
+    public LevelConfig GetLevelConfig(string level_name)
+    {
+        for (int i = 0; i < current_level_list.Count; i++)
+        {
+            if (current_level_list[i].level_name == level_name)
+            {
+                return current_level_list[i];
+            }
+        }
+        return null;
+    }
+
+    #region 加载除地形以外的其他物体
+    public void LoadElements()
+    {
+        // 加载elements
+        BundleInfoSystem.BundleInfoItem data = BundleInfoSystem.instance.GetBundleInfoItem(current_level_config.elements_name, "element");
+
+        current_level_elements_info = BundleInfoSystem.LoadAddressablesPrefabs(data.data, data.name, transform).GetComponent<CommonInfo>();
+    }
+
+
+    public void LoadPlayer()
+    {                    
+        // 加载角色
+        ModuleSystem.instance.LoadModule("player_system");
+        // 读取角色配置信息
+        APISystem.instance.CallAPI("player_system", "build_config");
+        // 读取当前角色信息。 （参数后续需要根据存档来变更
+        APISystem.instance.CallAPI("player_system", "build_player", new object[] { "player_01" });
+    }
+
+    public void LoadCameraSystem()
+    {
+        ModuleSystem.instance.LoadModule("camera_system");
+
+        // 读取相机信息
+    }
+
+    private void LoadMovePointSystem()
+    {
+        ModuleSystem.instance.LoadModule("move_point_system");
+        APISystem.instance.CallAPI("move_point_system", "move_point_config");
+        // 读取第一关角色和敌人的位置信息。 （参数后续需要根据存档来变更
+        APISystem.instance.CallAPI("move_point_system", "build_move_point", new object[] { "level_01" });
+
+    }
+
+    private void LoadPlayerControl()
+    {
+        ModuleSystem.instance.LoadModule("player_control");
+
+        APISystem.instance.CallAPI("player_control", "build_player_control");
+    }
+
+    private void LoadWeaponSystem()
+    {
+        ModuleSystem.instance.LoadModule("weapon_system");
+
+        // APISystem.instance.CallAPI("weanpon_system", "build_weapon_system_config");
+    }
+
+    #endregion
+
+    public CommonInfo GetElements(object[] param)
+    {
+        return current_level_elements_info;
+    }
+
+}

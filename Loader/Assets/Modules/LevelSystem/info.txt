@@ -1,0 +1,14 @@
+{
+    "name": "LevelSystem",
+    "path": "Assets/Modules/LevelSystem",
+    "aot" : [],
+    "dll" : [],
+    "datas": [
+        {
+            "name"   : "level_system",
+            "type"   : "Module",
+            "data"   : "Prefabs/level_system.prefab",
+            "tags"   : ["system"]
+        }
+    ]
+}
